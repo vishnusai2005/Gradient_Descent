@@ -1,261 +1,396 @@
-# Gradient Descent — Car Price Prediction
+# 🚗 Car Price Prediction — Gradient Descent, Regularization & Regression Diagnostics
 
-A from-scratch implementation of the **Gradient Descent** optimisation algorithm applied to predict used car selling prices. The project walks through the full ML pipeline: exploratory data analysis, feature engineering, standard scaling, a scikit-learn Linear Regression baseline, and a hand-coded Gradient Descent solver — all on the [Car Dekho](https://www.cardekho.com/) dataset.
-
----
-
-## Table of Contents
-
-- [Problem Statement](#problem-statement)
-- [Dataset](#dataset)
-- [What is Gradient Descent?](#what-is-gradient-descent)
-  - [The Cost Function](#the-cost-function)
-  - [The Update Rule](#the-update-rule)
-  - [Learning Rate](#learning-rate)
-  - [Epochs](#epochs)
-  - [Types of Gradient Descent](#types-of-gradient-descent)
-- [Project Workflow](#project-workflow)
-- [Implementation Details](#implementation-details)
-- [Results](#results)
-- [Getting Started](#getting-started)
-  - [Prerequisites](#prerequisites)
-  - [Installation](#installation)
-  - [Running the Notebook](#running-the-notebook)
-- [Project Structure](#project-structure)
+> **End-to-end regression pipeline** on the CarDekho dataset covering custom Gradient Descent implementation, Linear Regression diagnostics (Normality of Residuals, Multicollinearity via VIF, Homoscedasticity), Ridge Regression, and Lasso Regression with feature selection.
 
 ---
 
-## Problem Statement
+##  Problem Statement
 
-Given a set of features about a used car — its age, fuel type, seller type, transmission, kilometres driven, and ownership history — **predict its selling price**.
+Predict the **selling price of a used car** based on its age, kilometers driven, fuel type, transmission type, seller type, and ownership history — using the [CarDekho Dataset](https://www.kaggle.com/datasets/nehalbirla/vehicle-dataset-from-cardekho).
 
 ---
 
-## Dataset
+##  Table of Contents
 
-| Property | Value |
+- [Dataset Overview](#-dataset-overview)
+- [Tech Stack](#-tech-stack)
+- [Project Workflow](#-project-workflow)
+- [Exploratory Data Analysis](#-exploratory-data-analysis)
+- [Feature Engineering & Encoding](#-feature-engineering--encoding)
+- [Model Training — Linear Regression](#-model-training--linear-regression)
+- [Custom Gradient Descent](#-custom-gradient-descent-from-scratch)
+- [Assumptions of Linear Regression](#-assumptions-of-linear-regression)
+  - [Normality of Residuals](#1-normality-of-residuals)
+  - [No Multicollinearity (VIF)](#2-no-multicollinearity)
+  - [Homoscedasticity](#3-homoscedasticity)
+- [Ridge Regression (L2 Regularization)](#-ridge-regression-l2-regularization)
+- [Lasso Regression (L1 Regularization)](#-lasso-regression-l1-regularization)
+- [Model Comparison](#-model-comparison)
+- [Key Takeaways](#-key-takeaways)
+
+---
+
+## 📊 Dataset Overview
+
+| Property | Details |
 |---|---|
-| Source | Car Dekho |
-| File | `CAR_DETAILS_FROM_CAR_DEKHO.csv` |
-| Rows | 4,340 |
-| Original Features | 8 |
+| **Source** | CarDekho (CSV) |
+| **Target Variable** | `selling_price` |
+| **Original Features** | `name`, `year`, `selling_price`, `km_driven`, `fuel`, `seller_type`, `transmission`, `owner` |
+| **Engineered Feature** | `Age` = `max(year) + 1 − year` |
 
-**Raw columns:**
-
-| Column | Type | Description |
-|---|---|---|
-| `name` | object | Car model name (1,491 unique values — dropped) |
-| `year` | int | Manufacturing year → converted to `Age` |
-| `selling_price` | int | Target variable (₹) |
-| `km_driven` | int | Total kilometres driven |
-| `fuel` | object | Fuel type (Petrol, Diesel, CNG, LPG, Electric) |
-| `seller_type` | object | Individual / Dealer / Trustmark Dealer |
-| `transmission` | object | Manual / Automatic |
-| `owner` | object | First / Second / Third / Fourth & Above / Test Drive Car |
+The `name` column was dropped due to **1,491 unique categories** — too high cardinality relative to the dataset size.
 
 ---
 
-## What is Gradient Descent?
-
-Gradient Descent is an iterative first-order optimisation algorithm used to minimise a differentiable function — in machine learning, that function is the **cost (loss) function** that measures how far the model's predictions are from the true values.
-
-The algorithm takes small, repeated steps in the direction that most steeply *decreases* the cost, updating the model parameters at every step until it converges to a minimum.
-
-### The Cost Function
-
-For linear regression we use Mean Squared Error (MSE):
+## 🛠️ Tech Stack
 
 ```
-J(w) = (1 / 2m) * Σ (ŷᵢ − yᵢ)²
+Python 3.x | NumPy | Pandas | Matplotlib | Seaborn | Scikit-learn | SciPy | Statsmodels
 ```
 
-where:
+---
 
-- `m` — number of training samples
-- `ŷᵢ = X · w` — predicted value for sample *i*
-- `yᵢ` — actual target value for sample *i*
-- `w` — weight (parameter) vector
-
-The factor `1/2` is a convenience that cancels the `2` produced when differentiating, giving cleaner gradient expressions.
-
-### The Update Rule
-
-At each epoch, every weight is updated simultaneously:
+##  Project Workflow
 
 ```
-w := w − α · ∇J(w)
+Raw Data
+   │
+   ▼
+Data Preparation  ──► Drop 'name', Engineer 'Age', Handle Nulls & Duplicates
+   │
+   ▼
+EDA  ──► Countplots, Boxplots, Histograms, KDE Plots, Scatter Plots, Correlation Heatmap
+   │
+   ▼
+Feature Engineering  ──► One-Hot Encoding (drop_first=True) → Correlation Heatmap
+   │
+   ▼
+Train-Test Split (80/20)  ──► StandardScaler
+   │
+   ▼
+Model Training  ──► Linear Regression (sklearn) + Custom Gradient Descent (NumPy)
+   │
+   ▼
+Regression Diagnostics  ──► Linearity · Normality of Residuals · VIF · Homoscedasticity
+   │
+   ▼
+Regularization  ──► Ridge (α=10) · Lasso (α=10,000)
+   │
+   ▼
+Evaluation  ──► MAE · MSE · RMSE · R² Score
 ```
 
-The gradient with respect to the weight vector is:
+---
 
-```
-∇J(w) = (1/m) · Xᵀ · (Xw − y)
+## 📈 Exploratory Data Analysis
+
+### Categorical Features
+- **Fuel**: 5 categories — Diesel has the highest frequency; CNG, LPG, and Electric have the least.
+- **Seller Type**: 3 categories — Individual sellers dominate; Trustmark Dealers are fewest.
+- **Transmission**: 2 categories — Manual overwhelmingly outnumbers Automatic.
+- **Owner**: 5 categories — First Owner accounts for the majority of listings.
+
+### Numerical Features
+Histogram, Boxplot, and KDE plots were generated for `Age`, `selling_price`, and `km_driven`:
+- `selling_price` is **right-skewed**, with a few high-value outliers.
+- `km_driven` is also right-skewed, indicating most cars have moderate mileage.
+- `Age` distribution is spread across older vehicles in inventory.
+
+### Bivariate Analysis
+- **Age vs. Selling Price**: Newer cars (low Age) command significantly higher prices, especially First Owners.
+- **km_driven vs. Selling Price**: Lower-mileage cars tend to sell for more, though with high variance.
+
+---
+
+##  Feature Engineering & Encoding
+
+```python
+# Year → Age (reverses the ordering intuitively)
+data.insert(0, "Age", data['year'].max() + 1 - data['year'])
+data.drop('year', axis=1, inplace=True)
+
+# One-Hot Encoding with drop_first to avoid dummy variable trap
+categorical_features = ['fuel', 'seller_type', 'transmission', 'owner']
+df_encoded = pd.get_dummies(data, columns=categorical_features, drop_first=True).astype(int)
 ```
 
-Written out in full:
+A **correlation heatmap** was plotted post-encoding to understand linear relationships between all features and the target `selling_price`.
 
-```
-w := w − (α / m) · Xᵀ · (ŷ − y)
+---
+
+##  Model Training — Linear Regression
+
+```python
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LinearRegression
+
+scaler = StandardScaler()
+x_train_scaled = scaler.fit_transform(x_train)
+x_test_scaled  = scaler.transform(x_test)
+
+linear_reg = LinearRegression()
+linear_reg.fit(x_train_scaled, y_train)
 ```
 
-| Symbol | Meaning |
+**Evaluation Metrics Used:**
+
+| Metric | Description |
 |---|---|
-| `α` | Learning rate (step size) |
-| `∇J(w)` | Gradient of the cost w.r.t. weights |
-| `Xᵀ` | Transpose of the feature matrix |
-| `ŷ − y` | Residual (error) vector |
-
-### Learning Rate
-
-The learning rate `α` controls how large each step is:
-
-- **Too large** → the algorithm overshoots the minimum and may diverge.
-- **Too small** → convergence is correct but extremely slow.
-- **Just right** → cost decreases smoothly and reaches a minimum efficiently.
-
-This project uses `α = 0.01`, which produces stable, monotonically decreasing cost curves.
-
-### Epochs
-
-One **epoch** is a single full pass through the training data. With each epoch the weights are refined and the cost decreases. This project trains for **1,000 epochs**, printing the cost every 100 epochs so convergence can be monitored.
-
-### Types of Gradient Descent
-
-| Variant | Update frequency | Pros | Cons |
-|---|---|---|---|
-| **Batch GD** *(used here)* | Once per epoch (all samples) | Stable convergence, exact gradient | Slow on large datasets |
-| **Stochastic GD (SGD)** | Once per sample | Fast updates, escapes local minima | Noisy; high variance |
-| **Mini-batch GD** | Once per mini-batch | Balance of speed and stability | Requires tuning batch size |
+| **MAE** | Mean Absolute Error |
+| **MSE** | Mean Squared Error |
+| **RMSE** | Root Mean Squared Error |
+| **R² Score** | Proportion of variance explained by the model |
 
 ---
 
-## Project Workflow
+## ⚙️ Custom Gradient Descent (From Scratch)
 
-```
-Raw CSV
-   │
-   ▼
-Data Preparation
-  • Drop 'name' (1,491 unique values)
-  • Replace 'year' with 'Age' (max_year + 1 − year)
-  • Check nulls & duplicates
-   │
-   ▼
-Exploratory Data Analysis
-  • Count plots for categorical features
-  • Box plots: categorical vs. selling price
-  • Histograms & KDE plots for numeric features
-  • Scatter plots: Age & km_driven vs. selling price
-   │
-   ▼
-Feature Engineering
-  • One-Hot Encoding on [fuel, seller_type, transmission, owner]
-  • Correlation heatmap
-   │
-   ▼
-Train / Test Split  (80 / 20, random_state = 42)
-   │
-   ▼
-Standard Scaling  (fit on train, transform both)
-   │
-   ├──► Scikit-learn Linear Regression (baseline)
-   │         Evaluate: MAE, MSE, RMSE, R²
-   │
-   └──► Custom Gradient Descent
-             • Prepend bias column of ones
-             • 1,000 epochs, α = 0.01
-             • Plot cost curve
-```
-
----
-
-## Implementation Details
-
-The core implementation lives in the `gradient_descent` function:
+A vectorized Gradient Descent optimizer was implemented from scratch using NumPy — without any ML library — to demonstrate the core mathematical mechanics of weight optimization.
 
 ```python
 def gradient_descent(x, y, learning_rate=0.01, epochs=1000):
-    m = x.shape[0]          # number of samples
-    n = x.shape[1]          # number of features
-    weights = np.zeros(n)   # initialise weights to zero
+    m = x.shape[0]          # Number of samples
+    n = x.shape[1]          # Number of features
+    weights = np.zeros(n)   # Initialize weights to zero
     cost_history = []
 
     for epoch in range(epochs):
-        predictions  = np.dot(x, weights)              # ŷ = Xw
-        errors       = predictions - y                 # residuals
-        gradients    = (1 / m) * np.dot(x.T, errors)  # ∇J(w)
-        weights     -= learning_rate * gradients       # weight update
-        cost         = (1 / (2 * m)) * np.sum(errors ** 2)  # MSE
+        predictions = np.dot(x, weights)           # ŷ = Xw
+        errors      = predictions - y              # Residuals
+        gradients   = (1/m) * np.dot(x.T, errors) # ∂J/∂w
+        weights    -= learning_rate * gradients    # Weight update
+        cost        = (1/(2*m)) * np.sum(errors**2)  # MSE Cost
         cost_history.append(cost)
-
-        if epoch % 100 == 0:
-            print(f"Epoch {epoch}: Cost = {cost:.4f}")
 
     return weights, cost_history
 ```
 
-**Key design decisions:**
+**Key Concepts Implemented:**
 
-- **Zero initialisation** — weights start at zero; because the data is scaled, this is a stable and neutral starting point.
-- **Bias term** — a column of ones is prepended to `X` before training (`np.hstack`) so the intercept is learned as `weights[0]` without special-casing.
-- **Vectorised numpy operations** — all matrix multiplications use `np.dot`, avoiding slow Python loops over samples.
-- **Cost history logging** — every epoch's cost is appended to `cost_history`, enabling the convergence plot.
+| Concept | Formula |
+|---|---|
+| **Prediction** | `ŷ = Xw` |
+| **Gradient** | `(1/m) · Xᵀ(ŷ − y)` |
+| **Weight Update** | `w = w − α · ∇J(w)` |
+| **Cost (MSE)** | `(1/2m) · Σ(ŷ − y)²` |
 
----
-
-## Results
-
-After training, the cost curve is visualised to confirm that Gradient Descent converged:
+A bias term (column of ones) was prepended to `x_train_scaled` before feeding it into the optimizer:
 
 ```python
-plt.plot(range(len(cost_history)), cost_history)
-plt.title("Cost Function over Epochs")
-plt.xlabel("Epochs")
-plt.ylabel("Cost (MSE)")
-plt.show()
+x_train_np = np.hstack((np.ones((x_train_scaled.shape[0], 1)), x_train_scaled))
+weights, cost_history = gradient_descent(x_train_np, y_train_np, learning_rate=0.01, epochs=1000)
 ```
 
-A steadily decreasing curve indicates that the weights are converging toward the optimal solution. The scikit-learn `LinearRegression` baseline (evaluated with MAE, MSE, RMSE, and R²) provides a reference against which the custom implementation can be compared.
+**Cost curve** was plotted to confirm the model converges smoothly over 1,000 epochs — a classic downward-sloping loss curve indicating stable gradient updates with `lr=0.01`.
 
 ---
 
-## Getting Started
+##  Assumptions of Linear Regression
 
-### Prerequisites
+Post-training diagnostic checks were performed to validate that the fitted model satisfies the core assumptions of Ordinary Least Squares (OLS) regression.
 
-- Python 3.8+
-- Jupyter Notebook or JupyterLab
+---
 
-### Installation
+### 1. Normality of Residuals
+
+**Why it matters:** OLS inference (p-values, confidence intervals) is valid only when residuals are approximately normally distributed.
+
+**How it was checked:**
+
+```python
+import scipy.stats as stats
+
+def check_normality_of_residuals(model, x_test, y_test):
+    residuals_data = (y_test - model.predict(x_test))
+
+    # Histogram with KDE overlay
+    sns.histplot(residuals_data, kde=True, color='blue', bins=30)
+
+    # Q-Q Plot
+    stats.probplot(residuals_data, dist="norm", plot=plt)
+```
+
+**Plots Generated:**
+- **Histogram of Residuals** — checks if the residual distribution is bell-shaped.
+- **Q-Q Plot (Quantile-Quantile)** — compares residual quantiles against a theoretical normal distribution. Points lying on the diagonal line confirm normality.
+
+**Interpretation:** Deviations in the tails of the Q-Q plot indicate slight non-normality at extremes, a common pattern with real-world price data due to right-skewed targets.
+
+---
+
+### 2. No Multicollinearity
+
+**Why it matters:** High multicollinearity inflates coefficient variance, making individual predictor estimates unstable and unreliable.
+
+**How it was checked — Variance Inflation Factor (VIF):**
+
+```python
+from statsmodels.stats.outliers_influence import variance_inflation_factor
+
+def calculate_vif(x):
+    vif_data = pd.DataFrame()
+    vif_data['Feature'] = x.columns
+    vif_data['VIF'] = [variance_inflation_factor(x.values, i) for i in range(x.shape[1])]
+    return vif_data
+```
+
+**VIF Results:**
+
+| Feature | VIF | Interpretation |
+|---|---|---|
+| `transmission_Manual` | **9.74** | High — approaching problematic multicollinearity |
+| `Age` | 7.02 |  Moderate — warrants further investigation |
+| `fuel_Petrol` | 6.84 |  Moderate |
+| `fuel_Diesel` | 6.56 |  Moderate |
+| `seller_type_Individual` | 4.81 | Acceptable |
+| `km_driven` | 4.44 |  Acceptable |
+| Remaining features | < 2 |  Little to no multicollinearity |
+
+> **Rule of Thumb:** VIF > 10 → severe multicollinearity; VIF 5–10 → moderate; VIF < 5 → acceptable.
+
+`transmission_Manual` and fuel dummies (Petrol, Diesel) are correlated with each other — expected since certain fuel types are predominantly paired with manual transmissions in the Indian used car market.
+
+---
+
+### 3. Homoscedasticity
+
+**Why it matters:** OLS assumes **constant variance** of residuals across all predicted values. Violation (heteroscedasticity) leads to inefficient estimates and invalid significance tests.
+
+**How it was checked:**
+
+```python
+def homoscedasticity_assumption(model, x_test, y_test):
+    df_results = residuals(model, x_test, y_test)
+    sns.regplot(
+        x='Predicted', y='Residuals', data=df_results,
+        lowess=True,
+        color='#0055ff',
+        line_kws={'color': '#ff7000', 'ls': '--', 'lw': 2.5}
+    )
+    plt.axhline(y=0, color='#23bf00', lw=1)
+```
+
+**Plot:** Residuals vs. Predicted Values with a LOWESS (Locally Weighted Scatterplot Smoothing) trendline.
+
+**Interpretation:**
+- The **orange trendline should remain flat** (≈ 0) across all predicted values to confirm homoscedasticity.
+- A funnel-shaped spread indicates **heteroscedasticity** — a common issue when the target (`selling_price`) has a large range and skewed distribution.
+
+---
+
+## 📐 Ridge Regression (L2 Regularization)
+
+Ridge Regression adds an **L2 penalty** (`λ · Σwᵢ²`) to the OLS cost function to shrink large coefficients and reduce overfitting — particularly useful when multicollinearity is present.
+
+**Objective Function:**
+```
+J(w) = MSE + λ · Σwᵢ²
+```
+
+```python
+from sklearn.linear_model import Ridge
+
+ridge_reg = Ridge(alpha=10)   # alpha = λ (regularization strength)
+ridge_reg.fit(x_train_scaled, y_train)
+```
+
+**Key Behavior:**
+- **Shrinks all coefficients** toward zero but never sets them exactly to zero.
+- All features are **retained** in the model.
+- Higher `alpha` → stronger regularization → more shrinkage.
+
+**Evaluation:**
+```python
+ridge_train_mse = metrics.mean_squared_error(y_train, ridge_reg.predict(x_train_scaled))
+ridge_test_mse  = metrics.mean_squared_error(y_test,  ridge_reg.predict(x_test_scaled))
+```
+
+The coefficient DataFrame was inspected to compare Ridge-shrunken weights against the baseline Linear Regression coefficients.
+
+---
+
+## 🎯 Lasso Regression (L1 Regularization)
+
+Lasso Regression adds an **L1 penalty** (`λ · Σ|wᵢ|`) to the cost function — uniquely capable of driving irrelevant feature coefficients to **exactly zero**, performing automatic feature selection.
+
+**Objective Function:**
+```
+J(w) = MSE + λ · Σ|wᵢ|
+```
+
+```python
+from sklearn.linear_model import Lasso
+
+lasso_reg = Lasso(alpha=10000)  # Higher alpha for aggressive feature selection
+lasso_reg.fit(x_train_scaled, y_train)
+```
+
+**Key Behavior:**
+- Produces **sparse solutions** — drives some coefficients to exactly 0.
+- Acts as a built-in **feature selector**.
+- Higher `alpha` → more features zeroed out.
+
+**Retained Features Inspection:**
+```python
+lasso_coefficients = lasso_reg.coef_
+retained_features  = np.where(lasso_coefficients != 0)[0]
+print("Lasso Retained Features (Indices):", retained_features)
+```
+
+**Evaluation:**
+```python
+lasso_train_mse = metrics.mean_squared_error(y_train, lasso_reg.predict(x_train_scaled))
+lasso_test_mse  = metrics.mean_squared_error(y_test,  lasso_reg.predict(x_test_scaled))
+```
+
+---
+
+## 📊 Model Comparison
+
+| Model | Regularization | Key Property |
+|---|---|---|
+| **Linear Regression** | None | Baseline OLS — minimizes MSE directly |
+| **Gradient Descent** | None | Custom NumPy implementation — same OLS objective, iterative solver |
+| **Ridge Regression** | L2 (`α=10`) | Shrinks all coefficients; retains all features |
+| **Lasso Regression** | L1 (`α=10,000`) | Zeros out irrelevant features; performs feature selection |
+
+> Ridge is preferred when all features are potentially relevant but multicollinearity is present. Lasso is preferred when you suspect many features are irrelevant and want a simpler, interpretable model.
+
+---
+
+## 💡 Key Takeaways
+
+- **Feature Engineering**: Converting `year` → `Age` made the relationship with `selling_price` more intuitive and linear.
+- **High-Cardinality Drops**: Removing `name` (1,491 unique values) prevented overfitting and noise injection.
+- **Gradient Descent from Scratch**: Confirms understanding of the mathematical core of all gradient-based ML optimizers — `w = w − α · ∇J(w)`.
+- **VIF Analysis**: Revealed that `transmission_Manual` (VIF 9.74) and fuel dummies have moderate-to-high multicollinearity — Ridge Regression is especially well-suited for this dataset.
+- **Lasso as Feature Selector**: With `alpha=10,000`, Lasso effectively identifies the most predictive subset of features, improving model parsimony.
+- **Homoscedasticity Violation**: The residual fan-out pattern is common with skewed price targets — applying a log transformation on `selling_price` is a recommended next step.
+
+---
+
+## 📁 Repository Structure
+
+```
+├── Gradient_Descent.ipynb   # Main notebook
+├── README.md                # Project documentation
+└── data/
+    └── CAR DETAILS FROM CAR DEKHO.csv
+```
+
+---
+
+## 🚀 How to Run
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/<your-username>/<your-repo>.git
-cd <your-repo>
+git clone https://github.com/<your-username>/<repo-name>.git
+cd <repo-name>
 
-# 2. (Optional) create and activate a virtual environment
-python -m venv venv
-source venv/bin/activate        # Windows: venv\Scripts\activate
+# 2. Install dependencies
+pip install numpy pandas matplotlib seaborn scikit-learn scipy statsmodels
 
-# 3. Install dependencies
-pip install numpy pandas matplotlib seaborn scikit-learn jupyter
-```
-
-### Running the Notebook
-
-```bash
-jupyter notebook "Gradient_Descent.ipynb"
-```
-
-Ensure `CAR_DETAILS_FROM_CAR_DEKHO.csv` is in the same directory as the notebook, then run all cells from top to bottom.
-
----
-
-## Project Structure
-
-```
-.
-├── Gradient_Descent.ipynb          # Main notebook
-├── CAR_DETAILS_FROM_CAR_DEKHO.csv  # Dataset
-└── README.md                       # This file
+# 3. Launch the notebook
+jupyter notebook Gradient_Descent.ipynb
 ```
